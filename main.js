@@ -36,7 +36,7 @@ function main(argv){
 	http.createServer(function(req, res){
 		var urlInfo = parseURL(root, req.url);
 
-		combineFiles(urlInfo.pathnames, function(err, data){
+		validateFiles(urlInfo.pathnames, function(err, pathnames){
 			if (err) {
 				res.writeHead(404);
 				res.end(err.message);
@@ -45,11 +45,49 @@ function main(argv){
 				res.writeHead(200, {
 					'Content-Type': urlInfo.mime
 				});
-				res.end(data);
+				outputFiles(pathnames, res);
 			}
 		});
 	}).listen(port);
 };
+
+function validateFiles(pathnames, callback){
+	(function next(i, len){
+		if (i < len) {
+			fs.stat(pathnames[i], function(err, stats){
+				if (err) {
+					callback(err);
+				}
+				else if (!stats.isFile()) {
+					callback(new Error());
+				}
+				else {
+					next(i + 1, len);
+				}
+			});
+		}
+		else {
+			callback(null, pathnames)
+		}
+	})(0, pathnames.length);
+};
+
+function outputFiles(pathnames, writer){
+	(function next(i, len){
+		if (i < len) {
+			var reader = fs.createReadStream(pathnames[i]);
+
+			reader.pipe(writer, {end: false});
+			reader.on('end', function(){
+				next(i + 1, len);
+			});
+		}
+		else {
+			writer.end();
+		}
+	})(0, pathnames.length);
+};
+
 
 function parseURL(root, url){
 	var base, pathnames, parts;
